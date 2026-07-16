@@ -14,6 +14,50 @@ from src.logger import configure_logger
 logger = configure_logger()
 
 
+def _first_existing_path(candidates: list[Path]) -> str | None:
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+
+    return None
+
+
+def _default_chrome_binary_path() -> str | None:
+    path_from_env = os.getenv("CHROME_BINARY_PATH")
+    if path_from_env and Path(path_from_env).is_file():
+        return path_from_env
+
+    path_from_path = shutil.which("chrome") or shutil.which("chrome.exe") or shutil.which("google-chrome")
+    if path_from_path:
+        return path_from_path
+
+    return _first_existing_path(
+        [
+            Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
+            Path("C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"),
+            Path.home() / "AppData/Local/Google/Chrome/Application/chrome.exe",
+        ]
+    )
+
+
+def _default_chromedriver_path() -> str | None:
+    path_from_env = os.getenv("CHROMEDRIVER_PATH")
+    if path_from_env and Path(path_from_env).is_file():
+        return path_from_env
+
+    path_from_path = shutil.which("chromedriver") or shutil.which("chromedriver.exe")
+    if path_from_path:
+        return path_from_path
+
+    selenium_cache = Path.home() / ".cache/selenium/chromedriver/win64"
+    if selenium_cache.is_dir():
+        drivers = sorted(selenium_cache.glob("*/chromedriver.exe"), reverse=True)
+        if drivers:
+            return str(drivers[0])
+
+    return None
+
+
 def _validate_required_parameters(params: dict) -> None:
     missing = [field for field in REQUIRED_PARAMETERS if not params.get(field)]
     if missing:
@@ -107,8 +151,8 @@ def _validate_parameters(params: dict) -> dict:
         "headless": _parse_bool(params.get("headless", False)),
         "intervalo_acoes": intervalo_acoes,
         "manter_aberto_segundos": manter_aberto_segundos,
-        "chrome_binary_path": params.get("chrome_binary_path") or os.getenv("CHROME_BINARY_PATH"),
-        "chromedriver_path": params.get("chromedriver_path") or os.getenv("CHROMEDRIVER_PATH"),
+        "chrome_binary_path": params.get("chrome_binary_path") or _default_chrome_binary_path(),
+        "chromedriver_path": params.get("chromedriver_path") or _default_chromedriver_path(),
     }
 
 
