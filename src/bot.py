@@ -22,6 +22,26 @@ def _first_existing_path(candidates: list[Path]) -> str | None:
     return None
 
 
+def _windows_user_home() -> Path | None:
+    for value in (
+        os.getenv("USERPROFILE"),
+        os.getenv("HOME"),
+        (os.getenv("HOMEDRIVE") or "") + (os.getenv("HOMEPATH") or ""),
+    ):
+        if value:
+            path = Path(value)
+            if path.exists():
+                return path
+
+    local_app_data = os.getenv("LOCALAPPDATA")
+    if local_app_data:
+        path = Path(local_app_data)
+        if path.exists():
+            return path.parent
+
+    return None
+
+
 def _default_chrome_binary_path() -> str | None:
     path_from_env = os.getenv("CHROME_BINARY_PATH")
     if path_from_env and Path(path_from_env).is_file():
@@ -31,13 +51,16 @@ def _default_chrome_binary_path() -> str | None:
     if path_from_path:
         return path_from_path
 
-    return _first_existing_path(
-        [
-            Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
-            Path("C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"),
-            Path.home() / "AppData/Local/Google/Chrome/Application/chrome.exe",
-        ]
-    )
+    candidates = [
+        Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
+        Path("C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"),
+    ]
+
+    user_home = _windows_user_home()
+    if user_home:
+        candidates.append(user_home / "AppData/Local/Google/Chrome/Application/chrome.exe")
+
+    return _first_existing_path(candidates)
 
 
 def _default_chromedriver_path() -> str | None:
@@ -49,11 +72,13 @@ def _default_chromedriver_path() -> str | None:
     if path_from_path:
         return path_from_path
 
-    selenium_cache = Path.home() / ".cache/selenium/chromedriver/win64"
-    if selenium_cache.is_dir():
-        drivers = sorted(selenium_cache.glob("*/chromedriver.exe"), reverse=True)
-        if drivers:
-            return str(drivers[0])
+    user_home = _windows_user_home()
+    if user_home:
+        selenium_cache = user_home / ".cache/selenium/chromedriver/win64"
+        if selenium_cache.is_dir():
+            drivers = sorted(selenium_cache.glob("*/chromedriver.exe"), reverse=True)
+            if drivers:
+                return str(drivers[0])
 
     return None
 
