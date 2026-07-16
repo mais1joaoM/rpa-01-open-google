@@ -1,5 +1,9 @@
 from datetime import datetime
 import os
+from pathlib import Path
+import platform
+import shutil
+import sys
 from time import sleep
 
 from src.config import ALLOWED_MODES, DOWNLOADS_DIR, OUTPUTS_DIR, REQUIRED_PARAMETERS, ensure_runtime_directories
@@ -34,6 +38,21 @@ def _parse_bool(value) -> bool:
             return False
 
     return bool(value)
+
+
+def _log_runtime_context(validated_params: dict) -> None:
+    logger.info("Diretorio atual: %s", Path.cwd())
+    logger.info("Diretorio do projeto: %s", Path(__file__).resolve().parent.parent)
+    logger.info("Python: %s", sys.executable)
+    logger.info("Versao do Python: %s", platform.python_version())
+    logger.info("Sistema operacional: %s", platform.platform())
+    logger.info("Usuario: %s", os.getenv("USERNAME") or os.getenv("USER") or "nao identificado")
+    logger.info("Sessao Windows: %s", os.getenv("SESSIONNAME", "nao informado"))
+    logger.info("Headless: %s", validated_params["headless"])
+    logger.info("Chrome informado: %s", validated_params["chrome_binary_path"] or "nao informado")
+    logger.info("ChromeDriver informado: %s", validated_params["chromedriver_path"] or "nao informado")
+    logger.info("Chrome no PATH: %s", shutil.which("chrome") or shutil.which("google-chrome") or "nao encontrado")
+    logger.info("ChromeDriver no PATH: %s", shutil.which("chromedriver") or "nao encontrado")
 
 
 def _validate_parameters(params: dict) -> dict:
@@ -98,9 +117,15 @@ def _create_chrome_driver(
     chrome_binary_path: str | None = None,
     chromedriver_path: str | None = None,
 ):
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "A biblioteca selenium nao esta instalada. Confirme se o runner instalou o requirements.txt "
+            "antes de executar python main.py."
+        ) from error
 
     options = Options()
     options.add_argument("--start-maximized")
@@ -126,10 +151,17 @@ def _create_chrome_driver(
         },
     )
 
-    if chromedriver_path:
-        return webdriver.Chrome(service=Service(executable_path=chromedriver_path), options=options)
+    try:
+        if chromedriver_path:
+            return webdriver.Chrome(service=Service(executable_path=chromedriver_path), options=options)
 
-    return webdriver.Chrome(options=options)
+        return webdriver.Chrome(options=options)
+    except Exception as error:
+        raise RuntimeError(
+            "Nao foi possivel iniciar o Google Chrome via Selenium. Verifique se o Chrome esta instalado, "
+            "se o Selenium Manager pode obter o driver, se chrome_binary_path/chromedriver_path estao corretos "
+            "e se o runner esta em uma sessao desktop interativa quando headless=false."
+        ) from error
 
 
 def _search_google(
@@ -141,10 +173,16 @@ def _search_google(
     chrome_binary_path: str | None,
     chromedriver_path: str | None,
 ) -> dict:
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.support.ui import WebDriverWait
+    try:
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.support.ui import WebDriverWait
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "A biblioteca selenium nao esta instalada. Confirme se o runner instalou o requirements.txt "
+            "antes de executar python main.py."
+        ) from error
 
     driver = _create_chrome_driver(str(DOWNLOADS_DIR), headless, chrome_binary_path, chromedriver_path)
 
@@ -211,6 +249,7 @@ def run_bot(params: dict) -> dict:
     logger.info("Periodo: %s ate %s", validated_params["data_inicio"], validated_params["data_fim"])
     logger.info("Modo: %s", validated_params["modo"])
     logger.info("Termo de pesquisa: %s", validated_params["termo_pesquisa"])
+    _log_runtime_context(validated_params)
 
     search_result = _search_google(
         validated_params["termo_pesquisa"],

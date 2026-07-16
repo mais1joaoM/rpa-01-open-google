@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 import sys
 import traceback
 
@@ -22,6 +23,9 @@ def load_parameters() -> dict:
 
 def main() -> int:
     print("[TARDZ] Iniciando robo")
+    print(f"[TARDZ] Diretorio atual: {Path.cwd()}")
+    print(f"[TARDZ] Arquivo main.py: {Path(__file__).resolve()}")
+    print(f"[TARDZ] Python: {sys.executable}")
 
     try:
         params = load_parameters()
