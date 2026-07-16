@@ -5,6 +5,7 @@ import platform
 import shutil
 import sys
 from time import sleep
+from urllib.parse import quote_plus
 
 from src.config import ALLOWED_MODES, DOWNLOADS_DIR, OUTPUTS_DIR, REQUIRED_PARAMETERS, ensure_runtime_directories
 from src.logger import configure_logger
@@ -153,9 +154,9 @@ def _create_chrome_driver(
 
     try:
         if chromedriver_path:
-            return webdriver.Chrome(service=Service(executable_path=chromedriver_path), options=options)
+            return webdriver.Chrome(service=Service(executable_path=chromedriver_path, port=9515), options=options)
 
-        return webdriver.Chrome(options=options)
+        return webdriver.Chrome(service=Service(port=9515), options=options)
     except Exception as error:
         raise RuntimeError(
             "Nao foi possivel iniciar o Google Chrome via Selenium. Verifique se o Chrome esta instalado, "
@@ -188,33 +189,11 @@ def _search_google(
 
     try:
         logger.info("Abrindo Google Chrome")
-        driver.get("https://www.google.com/?hl=pt-BR")
+        search_url = f"https://www.google.com/search?q={quote_plus(termo_pesquisa)}&hl=pt-BR"
+        driver.get(search_url)
         wait = WebDriverWait(driver, 20)
         wait.until(lambda current_driver: current_driver.execute_script("return document.readyState") == "complete")
-
-        if intervalo_acoes:
-            sleep(intervalo_acoes)
-
-        logger.info("Localizando campo de pesquisa")
-        search_box = wait.until(EC.element_to_be_clickable((By.NAME, "q")))
-        search_box.click()
-
-        if intervalo_acoes:
-            sleep(intervalo_acoes)
-
-        logger.info("Digitando termo de pesquisa: %s", termo_pesquisa)
-        for character in termo_pesquisa:
-            search_box.send_keys(character)
-            if intervalo_acoes:
-                sleep(min(intervalo_acoes, 0.15))
-
-        if intervalo_acoes:
-            sleep(intervalo_acoes)
-
-        logger.info("Enviando pesquisa")
-        search_box.send_keys(Keys.ENTER)
-
-        wait.until(EC.presence_of_element_located((By.ID, "search")))
+        wait.until(lambda current_driver: "google." in current_driver.current_url.lower())
 
         if aguardar_segundos:
             sleep(aguardar_segundos)
