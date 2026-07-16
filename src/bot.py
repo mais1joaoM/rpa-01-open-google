@@ -1,6 +1,6 @@
 from datetime import datetime
+import os
 from time import sleep
-from urllib.parse import quote_plus
 
 from src.config import ALLOWED_MODES, DOWNLOADS_DIR, OUTPUTS_DIR, REQUIRED_PARAMETERS, ensure_runtime_directories
 from src.logger import configure_logger
@@ -49,7 +49,7 @@ def _validate_parameters(params: dict) -> dict:
     if modo not in ALLOWED_MODES:
         raise ValueError(f"modo deve ser um destes valores: {', '.join(ALLOWED_MODES)}")
 
-    termo_pesquisa = str(params["termo_pesquisa"]).strip()
+    termo_pesquisa = str(params.get("termo_pesquisa", "Tardz Automations")).strip()
     if not termo_pesquisa:
         raise ValueError("termo_pesquisa nao pode ser vazio.")
 
@@ -61,6 +61,22 @@ def _validate_parameters(params: dict) -> dict:
     if aguardar_segundos < 0:
         raise ValueError("aguardar_segundos nao pode ser negativo.")
 
+    try:
+        intervalo_acoes = float(params.get("intervalo_acoes", 1))
+    except (TypeError, ValueError) as error:
+        raise ValueError("intervalo_acoes deve ser um numero.") from error
+
+    if intervalo_acoes < 0:
+        raise ValueError("intervalo_acoes nao pode ser negativo.")
+
+    try:
+        manter_aberto_segundos = int(params.get("manter_aberto_segundos", 30))
+    except (TypeError, ValueError) as error:
+        raise ValueError("manter_aberto_segundos deve ser um numero inteiro.") from error
+
+    if manter_aberto_segundos < 0:
+        raise ValueError("manter_aberto_segundos nao pode ser negativo.")
+
     return {
         "cliente": str(params["cliente"]).strip(),
         "data_inicio": data_inicio.date().isoformat(),
@@ -69,10 +85,19 @@ def _validate_parameters(params: dict) -> dict:
         "termo_pesquisa": termo_pesquisa,
         "aguardar_segundos": aguardar_segundos,
         "headless": _parse_bool(params.get("headless", False)),
+        "intervalo_acoes": intervalo_acoes,
+        "manter_aberto_segundos": manter_aberto_segundos,
+        "chrome_binary_path": params.get("chrome_binary_path") or os.getenv("CHROME_BINARY_PATH"),
+        "chromedriver_path": params.get("chromedriver_path") or os.getenv("CHROMEDRIVER_PATH"),
     }
 
 
-def _create_chrome_driver(download_dir: str, headless: bool):
+def _create_chrome_driver(
+    download_dir: str,
+    headless: bool,
+    chrome_binary_path: str | None = None,
+    chromedriver_path: str | None = None,
+):
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
@@ -81,10 +106,16 @@ def _create_chrome_driver(download_dir: str, headless: bool):
     options.add_argument("--start-maximized")
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-popup-blocking")
+    options.add_experimental_option("detach", not headless)
 
     if headless:
         options.add_argument("--headless=new")
         options.add_argument("--window-size=1366,768")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+
+    if chrome_binary_path:
+        options.binary_location = chrome_binary_path
 
     options.add_experimental_option(
         "prefs",
@@ -95,23 +126,57 @@ def _create_chrome_driver(download_dir: str, headless: bool):
         },
     )
 
-    return webdriver.Chrome(service=Service(port=9515), options=options)
+    if chromedriver_path:
+        return webdriver.Chrome(service=Service(executable_path=chromedriver_path), options=options)
+
+    return webdriver.Chrome(options=options)
 
 
-def _search_google(termo_pesquisa: str, aguardar_segundos: int, headless: bool) -> dict:
+def _search_google(
+    termo_pesquisa: str,
+    aguardar_segundos: int,
+    headless: bool,
+    intervalo_acoes: float,
+    manter_aberto_segundos: int,
+    chrome_binary_path: str | None,
+    chromedriver_path: str | None,
+) -> dict:
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
 
-    driver = _create_chrome_driver(str(DOWNLOADS_DIR), headless)
+    driver = _create_chrome_driver(str(DOWNLOADS_DIR), headless, chrome_binary_path, chromedriver_path)
 
     try:
         logger.info("Abrindo Google Chrome")
-        logger.info("Pesquisando por: %s", termo_pesquisa)
-        search_url = f"https://www.google.com/search?q={quote_plus(termo_pesquisa)}&hl=pt-BR"
-        driver.get(search_url)
-
+        driver.get("https://www.google.com/?hl=pt-BR")
         wait = WebDriverWait(driver, 20)
         wait.until(lambda current_driver: current_driver.execute_script("return document.readyState") == "complete")
-        wait.until(lambda current_driver: "google." in current_driver.current_url.lower())
+
+        if intervalo_acoes:
+            sleep(intervalo_acoes)
+
+        logger.info("Localizando campo de pesquisa")
+        search_box = wait.until(EC.element_to_be_clickable((By.NAME, "q")))
+        search_box.click()
+
+        if intervalo_acoes:
+            sleep(intervalo_acoes)
+
+        logger.info("Digitando termo de pesquisa: %s", termo_pesquisa)
+        for character in termo_pesquisa:
+            search_box.send_keys(character)
+            if intervalo_acoes:
+                sleep(min(intervalo_acoes, 0.15))
+
+        if intervalo_acoes:
+            sleep(intervalo_acoes)
+
+        logger.info("Enviando pesquisa")
+        search_box.send_keys(Keys.ENTER)
+
+        wait.until(EC.presence_of_element_located((By.ID, "search")))
 
         if aguardar_segundos:
             sleep(aguardar_segundos)
@@ -125,8 +190,16 @@ def _search_google(termo_pesquisa: str, aguardar_segundos: int, headless: bool) 
             "screenshot": str(screenshot_path),
         }
     finally:
-        logger.info("Fechando Google Chrome")
-        driver.quit()
+        if headless:
+            logger.info("Fechando Google Chrome")
+            driver.quit()
+        elif manter_aberto_segundos > 0:
+            logger.info("Mantendo Chrome aberto por %s segundos para visualizacao", manter_aberto_segundos)
+            sleep(manter_aberto_segundos)
+            logger.info("Fechando Google Chrome")
+            driver.quit()
+        else:
+            logger.info("Chrome permanecera aberto apos o fim do robo")
 
 
 def run_bot(params: dict) -> dict:
@@ -143,6 +216,10 @@ def run_bot(params: dict) -> dict:
         validated_params["termo_pesquisa"],
         validated_params["aguardar_segundos"],
         validated_params["headless"],
+        validated_params["intervalo_acoes"],
+        validated_params["manter_aberto_segundos"],
+        validated_params["chrome_binary_path"],
+        validated_params["chromedriver_path"],
     )
 
     return {

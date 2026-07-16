@@ -6,7 +6,7 @@ DOWNLOADS_DIR = BASE_DIR / "downloads"
 OUTPUTS_DIR = BASE_DIR / "outputs"
 LOGS_DIR = BASE_DIR / "logs"
 
-REQUIRED_PARAMETERS = ("cliente", "data_inicio", "data_fim", "modo", "termo_pesquisa")
+REQUIRED_PARAMETERS = ("cliente", "data_inicio", "data_fim", "modo")
 ALLOWED_MODES = ("producao", "homologacao", "teste")
 
 
