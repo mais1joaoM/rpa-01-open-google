@@ -9,7 +9,7 @@ O entrypoint que deve ser cadastrado na Tardz e:
 ```bash
 main.py
 ```
-
+teste
 O runner externo deve executar:
 
 ```bash
