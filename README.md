@@ -52,7 +52,7 @@ Campos obrigatorios:
 
 Campos opcionais:
 
-- `headless`: `true` para executar sem janela grafica visivel. O padrao e `false`.
+- `headless`: `true` para executar sem janela grafica visivel. Recomendado para execucoes via Tardz Runner. O padrao e `false`.
 - `aguardar_segundos`: tempo de espera apos carregar os resultados. O padrao e `3`.
 
 Exemplo:
@@ -64,7 +64,7 @@ Exemplo:
   "data_fim": "2026-07-31",
   "modo": "producao",
   "termo_pesquisa": "Tardz Automations",
-  "headless": false,
+  "headless": true,
   "aguardar_segundos": 3
 }
 ```

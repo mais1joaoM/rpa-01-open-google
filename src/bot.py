@@ -1,5 +1,6 @@
 from datetime import datetime
 from time import sleep
+from urllib.parse import quote_plus
 
 from src.config import ALLOWED_MODES, DOWNLOADS_DIR, OUTPUTS_DIR, REQUIRED_PARAMETERS, ensure_runtime_directories
 from src.logger import configure_logger
@@ -97,25 +98,19 @@ def _create_chrome_driver(download_dir: str, headless: bool):
 
 
 def _search_google(termo_pesquisa: str, aguardar_segundos: int, headless: bool) -> dict:
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
 
     driver = _create_chrome_driver(str(DOWNLOADS_DIR), headless)
 
     try:
         logger.info("Abrindo Google Chrome")
-        driver.get("https://www.google.com")
-
         logger.info("Pesquisando por: %s", termo_pesquisa)
-        wait = WebDriverWait(driver, 20)
-        search_box = wait.until(EC.presence_of_element_located((By.NAME, "q")))
-        search_box.clear()
-        search_box.send_keys(termo_pesquisa)
-        search_box.send_keys(Keys.ENTER)
+        search_url = f"https://www.google.com/search?q={quote_plus(termo_pesquisa)}&hl=pt-BR"
+        driver.get(search_url)
 
-        wait.until(EC.presence_of_element_located((By.ID, "search")))
+        wait = WebDriverWait(driver, 20)
+        wait.until(lambda current_driver: current_driver.execute_script("return document.readyState") == "complete")
+        wait.until(lambda current_driver: "google." in current_driver.current_url.lower())
 
         if aguardar_segundos:
             sleep(aguardar_segundos)
