@@ -75,6 +75,7 @@ def _validate_parameters(params: dict) -> dict:
 def _create_chrome_driver(download_dir: str, headless: bool):
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
 
     options = Options()
     options.add_argument("--start-maximized")
@@ -94,7 +95,7 @@ def _create_chrome_driver(download_dir: str, headless: bool):
         },
     )
 
-    return webdriver.Chrome(options=options)
+    return webdriver.Chrome(service=Service(port=9515), options=options)
 
 
 def _search_google(termo_pesquisa: str, aguardar_segundos: int, headless: bool) -> dict:
